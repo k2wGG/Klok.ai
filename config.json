@@ -1,0 +1,14 @@
+{
+  "accounts": [
+    {
+      "token": "toke1",
+      "ai_id": "chat_id1",
+      "proxy": "http://login:password@ip:port1"
+    },
+    {
+      "token": "toke2",
+      "ai_id": "chat_id2",
+      "proxy": "http://login:password@ip:port2"
+    }
+  ]
+}
