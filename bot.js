@@ -35,7 +35,7 @@ function showBanner() {
   );
 }
 
-// ============ Работа с аккаунтами ============
+// ==================== Работа с аккаунтами ====================
 const ACCOUNTS_FILE = 'config.json';
 
 function loadAccounts() {
@@ -95,29 +95,81 @@ function listAccounts() {
   });
 }
 
-// ============ Основные функции бота ============
+// ==================== Работа с сообщениями ====================
+
+const DEFAULT_MESSAGES = [
+  "Hey there!",
+  "What's new?",
+  "How's it going?",
+  "Tell me something interesting",
+  "What do you think about AI?",
+  "Have you heard the latest news?",
+  "What's your favorite topic?",
+  "Let's discuss something fun",
+];
+
+const MESSAGES_FILE = 'messages.json';
+
+function loadMessages() {
+  if (!fs.existsSync(MESSAGES_FILE)) {
+    const defaultData = { messages: DEFAULT_MESSAGES };
+    fs.writeFileSync(MESSAGES_FILE, JSON.stringify(defaultData, null, 2), 'utf8');
+    return defaultData.messages;
+  }
+  try {
+    const data = fs.readFileSync(MESSAGES_FILE, 'utf8');
+    const obj = JSON.parse(data);
+    return obj.messages || [];
+  } catch (e) {
+    console.error(colors.fg.red + 'Ошибка чтения messages.json: ' + e + colors.reset);
+    return [];
+  }
+}
+
+function saveMessages(messagesArray) {
+  fs.writeFileSync(MESSAGES_FILE, JSON.stringify({ messages: messagesArray }, null, 2), 'utf8');
+}
+
+function getRandomMessage() {
+  const messages = loadMessages();
+  if (!messages.length) return "Default message";
+  const index = Math.floor(Math.random() * messages.length);
+  return messages[index];
+}
+
+async function addNewMessage() {
+  const answer = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'message',
+      message: 'Введите новое сообщение:'
+    }
+  ]);
+  const messages = loadMessages();
+  messages.push(answer.message.trim());
+  saveMessages(messages);
+  console.log(colors.fg.green + 'Новое сообщение добавлено в ' + MESSAGES_FILE + colors.reset);
+}
+
+function listMessages() {
+  const messages = loadMessages();
+  if (!messages.length) {
+    console.log(colors.fg.yellow + 'Сообщения не найдены.' + colors.reset);
+    return;
+  }
+  console.log(colors.fg.cyan + 'Список сообщений:' + colors.reset);
+  messages.forEach((msg, idx) => {
+    console.log(`${idx + 1}) ${msg}`);
+  });
+}
+
+// ==================== Функции для работы с API ====================
 
 const CONFIG = {
   API_BASE_URL: 'https://api1-pp.klokapp.ai/v1',
-  CHAT_INTERVAL: 60000, // 1 минута
-  RANDOM_MESSAGES: [
-    "Hey there!",
-    "What's new?",
-    "How's it going?",
-    "Tell me something interesting",
-    "What do you think about AI?",
-    "Have you heard the latest news?",
-    "What's your favorite topic?",
-    "Let's discuss something fun",
-  ]
+  CHAT_INTERVAL: 60000 // 1 минута
 };
 
-function getRandomMessage() {
-  const index = Math.floor(Math.random() * CONFIG.RANDOM_MESSAGES.length);
-  return CONFIG.RANDOM_MESSAGES[index];
-}
-
-// Создание клиента для API с поддержкой прокси
 function createApiClient(token, proxyUrl = '') {
   let agent = null;
   if (proxyUrl) {
@@ -150,17 +202,13 @@ function createApiClient(token, proxyUrl = '') {
   });
 }
 
-// Отправка сообщения в указанный чат (ai_id)
 async function sendMessageToThread(apiClient, chatId, message) {
   try {
     const chatData = {
       id: chatId,
       title: "New Chat",
       messages: [
-        {
-          role: "user",
-          content: message
-        }
+        { role: "user", content: message }
       ],
       sources: [],
       model: "llama-3.3-70b-instruct",
@@ -187,7 +235,6 @@ async function sendMessageToThread(apiClient, chatId, message) {
   }
 }
 
-// Проверка баллов
 async function checkPoints(apiClient) {
   try {
     const response = await apiClient.get('/points');
@@ -214,7 +261,8 @@ async function checkPoints(apiClient) {
   }
 }
 
-// Запуск бота для одного аккаунта
+// ==================== Логика бота ====================
+
 async function runSingleBot(account) {
   console.log(colors.fg.cyan + `Запуск бота для токена: ${account.token.slice(0, 6)}...` + colors.reset);
   const apiClient = createApiClient(account.token, account.proxy);
@@ -225,8 +273,7 @@ async function runSingleBot(account) {
   }
   // Первичная проверка баллов
   await checkPoints(apiClient);
-  
-  // Основной цикл отправки сообщений
+  // Цикл отправки сообщений
   setInterval(async () => {
     const points = await checkPoints(apiClient);
     if (!points || points.total_points <= 0) {
@@ -242,14 +289,12 @@ async function runSingleBot(account) {
   }, CONFIG.CHAT_INTERVAL);
 }
 
-// Запуск ботов для всех аккаунтов
 async function runAllBots() {
   const accountsObj = loadAccounts();
   if (!accountsObj.accounts.length) {
     console.log(colors.fg.red + 'Аккаунты не найдены. Сначала добавьте хотя бы один аккаунт.' + colors.reset);
     return;
   }
-  // Запускаем бота для каждого аккаунта параллельно
   for (const account of accountsObj.accounts) {
     runSingleBot(account);
   }
@@ -259,12 +304,15 @@ async function runAllBots() {
   }
 }
 
-// Главное меню
+// ==================== Главное меню ====================
+
 async function mainMenu() {
   const choices = [
     { name: 'Установить зависимости (npm install axios uuid fs inquirer)', value: 'install' },
     { name: 'Добавить/Изменить аккаунт (токен, ai_id, proxy)', value: 'addAccount' },
     { name: 'Посмотреть список аккаунтов', value: 'listAccounts' },
+    { name: 'Добавить новое сообщение', value: 'addMessage' },
+    { name: 'Посмотреть список сообщений', value: 'listMessages' },
     { name: 'Запустить чат-бот(ы) для всех аккаунтов', value: 'startBots' },
     { name: 'Выход', value: 'exit' }
   ];
@@ -279,7 +327,6 @@ async function mainMenu() {
   return answer.action;
 }
 
-// Основная функция
 async function main() {
   showBanner();
   const action = await mainMenu();
@@ -302,6 +349,12 @@ async function main() {
       break;
     case 'listAccounts':
       listAccounts();
+      break;
+    case 'addMessage':
+      await addNewMessage();
+      break;
+    case 'listMessages':
+      listMessages();
       break;
     case 'startBots':
       await runAllBots();
